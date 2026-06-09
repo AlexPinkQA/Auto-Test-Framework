@@ -47,7 +47,7 @@ function request(url: string, method: string, body?: object): Promise<any> {
 
 async function run(): Promise<void> {
   const SERVER_ENV  = (process.env.SERVER_ENV  || 'TEST').toUpperCase();
-  const CLIENT_ENV  = (process.env.CLIENT_ENV  || 'TEST').toUpperCase();
+  const CLIENT_ENV  = (process.env.CLIENT_ENV  || 'DEVELOPMENT').toUpperCase();
   const CURRENCY    = process.env.CURRENCY     || 'EUR';
   const BALANCE     = parseFloat(process.env.BALANCE || '10000');
   const GAME        = process.env.GAME         || 'mh_10008';
