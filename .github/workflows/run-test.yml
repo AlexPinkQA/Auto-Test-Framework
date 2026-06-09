@@ -1,0 +1,41 @@
+name: Run Spin Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      game_url:
+        description: 'Game URL (paste full URL with playerSession)'
+        required: true
+        type: string
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Run spin test
+        run: npm run test:spin
+        env:
+          GAME_URL: ${{ inputs.game_url }}
+          CI: true
+
+      - name: Upload video
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-video-${{ github.run_number }}
+          path: videos/
+          retention-days: 30
