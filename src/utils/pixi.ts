@@ -186,8 +186,8 @@ export async function waitForContainer(
 }
 
 /**
- * Clicks a container by directly invoking its registered EventEmitter handlers.
- * No coordinates — works regardless of screen resolution.
+ * Clicks a container using real mouse events at dynamic PixiJS bounds coordinates.
+ * Shows visible cursor movement. Falls back to triggerButton if bounds unavailable.
  * @param fromParent - optional parent name to scope the search
  */
 export async function clickContainer(
@@ -195,12 +195,54 @@ export async function clickContainer(
   name: string,
   fromParent?: string,
 ): Promise<boolean> {
+  // Get page-space center of the button using PixiJS bounds + canvas CSS scale
+  const coords = await page.evaluate(
+    ({ name, fromParent }) => {
+      const utils = (window as any).__pixiUtils;
+      const root = utils.resolveRoot(fromParent);
+      if (!root) return null;
+
+      const all: any[] = [];
+      const queue = [root];
+      while (queue.length) {
+        const cur = queue.shift();
+        if (cur.name === name) all.push(cur);
+        for (const c of cur.children ?? []) queue.push(c);
+      }
+      const node = all.find((n: any) => n.worldVisible) ?? all[0];
+      if (!node) return null;
+
+      let bounds: any = null;
+      try { bounds = node.getBounds(); } catch {}
+      if (!bounds || bounds.width === 0) return null;
+
+      const canvas = document.querySelector('canvas');
+      if (!canvas) return null;
+      const rect = canvas.getBoundingClientRect();
+      // Account for CSS scaling of the canvas element
+      const scaleX = rect.width / (canvas as HTMLCanvasElement).width;
+      const scaleY = rect.height / (canvas as HTMLCanvasElement).height;
+
+      return {
+        x: rect.left + (bounds.x + bounds.width / 2) * scaleX,
+        y: rect.top + (bounds.y + bounds.height / 2) * scaleY,
+      };
+    },
+    { name, fromParent },
+  );
+
+  if (coords) {
+    await page.mouse.move(coords.x, coords.y);
+    await page.mouse.click(coords.x, coords.y);
+    return true;
+  }
+
+  // Fallback: direct JS handler invocation
   return page.evaluate(
     ({ name, fromParent }) => {
       const utils = (window as any).__pixiUtils;
       const root = utils.resolveRoot(fromParent);
       if (!root) return false;
-      // Collect all matching nodes and prefer the world-visible one
       const all: any[] = [];
       const queue = [root];
       while (queue.length) {
