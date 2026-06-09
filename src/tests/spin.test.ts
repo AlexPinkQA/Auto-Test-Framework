@@ -39,17 +39,31 @@ async function getBalance(page: Page): Promise<string | null> {
 
 async function clickBetButton(page: Page, name: string): Promise<void> {
   await page.evaluate((name: string) => {
-    const loc = (window as any).__pixiLocator;
-    const nodes = loc.findAll(loc.getApp().stage, (n: any) => n.name === name);
-    const node = nodes.find((n: any) => n.worldVisible) ?? nodes[0];
-    if (node) loc.clickNode(node);
+    const utils = (window as any).__pixiUtils;
+    const app = utils.getApp();
+    if (!app?.stage) return;
+    const all: any[] = [];
+    const queue = [app.stage];
+    while (queue.length) {
+      const cur = queue.shift();
+      if (cur.name === name) all.push(cur);
+      for (const c of cur.children ?? []) queue.push(c);
+    }
+    const node = all.find((n: any) => n.worldVisible) ?? all[0];
+    if (node) utils.triggerButton(node);
   }, name);
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(300);
 }
 
 async function setBet(page: Page, target: string): Promise<void> {
   const toNum = (s: string) => parseFloat(s.replace(/[€,]/g, ''));
-  let current = await getBet(page);
+  // Wait until bet value is readable
+  let current: string | null = null;
+  for (let i = 0; i < 20; i++) {
+    current = await getBet(page);
+    if (current) break;
+    await page.waitForTimeout(500);
+  }
   if (current === target) return;
 
   const dir = toNum(current ?? '0') < toNum(target) ? 'btn_plus' : 'btn_minus';
@@ -79,6 +93,23 @@ async function runTest(): Promise<void> {
     console.log('      btn_start found — clicking...');
     await clickContainer(page, 'btn_start');
     console.log('      Preloader skipped.');
+
+    // Dismiss hardware acceleration warning popup if present
+    await page.evaluate(() => {
+      const utils = (window as any).__pixiUtils;
+      const app = utils.getApp();
+      if (!app?.stage) return;
+      const queue = [app.stage];
+      while (queue.length) {
+        const cur = queue.shift();
+        const name = (cur.name ?? '').toLowerCase();
+        if (['btn_ok','btn_close','btn_confirm','btn_continue','btn_accept'].includes(name)) {
+          utils.triggerButton(cur);
+        }
+        for (const c of cur.children ?? []) queue.push(c);
+      }
+    });
+    await page.waitForTimeout(500);
 
     console.log('[3/5] Setting bet to €1.00...');
     await waitForContainer(page, 'spin_button', undefined, 30000);

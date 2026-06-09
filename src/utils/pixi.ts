@@ -25,7 +25,12 @@ export async function launchWithDevTools(
   const isCI = !!process.env.CI;
   const context = await chromium.launchPersistentContext('', {
     headless: isCI,
-    args: isCI ? [] : [
+    args: isCI ? [
+      '--use-gl=swiftshader',
+      '--enable-webgl',
+      '--ignore-gpu-blocklist',
+      '--disable-gpu-sandbox',
+    ] : [
       `--disable-extensions-except=${EXTENSION_PATH}`,
       `--load-extension=${EXTENSION_PATH}`,
     ],
