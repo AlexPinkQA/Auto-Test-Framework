@@ -51,7 +51,7 @@ async function run(): Promise<void> {
   const CURRENCY    = process.env.CURRENCY     || 'EUR';
   const BALANCE     = parseFloat(process.env.BALANCE || '10000');
   const GAME        = process.env.GAME         || 'mh_10008';
-  const LANG        = process.env.LANG         || 'en';
+  const LANG        = process.env.GAME_LANG     || 'en';
 
   const apiBase = SERVER_URLS[SERVER_ENV];
   if (!apiBase) {
