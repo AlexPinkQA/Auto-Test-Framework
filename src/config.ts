@@ -12,7 +12,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   operator: 'test',
   server_url: 'https://asia.test.rubyplay.io',
   lang: 'en',
-  playerSession: 'EUR-0eac48fa92355a523310ec',
+  playerSession: 'EUR-6a0741e3ab23d06657d60e',
 };
 
 export function configFromUrl(rawUrl: string): GameConfig {

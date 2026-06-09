@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/alexpink/.claude/projects/-Users-alexpink-Downloads-madhat-bug-extension/**)",
+      "Bash(python3 -c ' *)",
+      "Bash(gh release *)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(npm show *)",
+      "Bash(npm --version)",
+      "Bash(mkdir -p /tmp/pixi-inspector-src)",
+      "Bash(tar -xzf /tmp/pixi-inspector-src.tar.gz -C /tmp/pixi-inspector-src --strip-components=1)",
+      "Read(//tmp/pixi-inspector-src/apps/**)",
+      "Read(//private/tmp/pixi-inspector-src/**)",
+      "Bash(npx pnpm *)",
+      "Bash(cat /tmp/pixi-inspector-src/.npmrc 2>/dev/null || echo \"no .npmrc\")",
+      "Read(//tmp/pixi-inspector-src/**)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); d.setdefault\\('pnpm',{}\\)['onlyBuiltDependencies']=['esbuild','spawn-sync','unrs-resolver']; print\\(json.dumps\\(d,indent=2\\)\\)\")",
+      "Bash(mv /tmp/pkg_tmp.json /tmp/pixi-inspector-src/package.json)",
+      "Bash(node install.js)",
+      "Bash(node build.js)"
+    ]
+  }
+}

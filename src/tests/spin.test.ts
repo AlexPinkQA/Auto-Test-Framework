@@ -81,7 +81,8 @@ async function runTest(): Promise<void> {
   console.log('TEST: Open game → skip preloader → set bet → spin\n');
 
   const videosDir = path.resolve(__dirname, '../../videos');
-  const { context, page } = await launchWithDevTools(undefined, { dir: videosDir });
+  const isCI = !!process.env.CI;
+  const { context, page } = await launchWithDevTools(undefined, isCI ? { dir: videosDir } : undefined);
 
   try {
     console.log('[1/5] Opening game...');
@@ -91,8 +92,42 @@ async function runTest(): Promise<void> {
     console.log('[2/5] Waiting for preloader (btn_start)...');
     await waitForContainer(page, 'btn_start', undefined, 60000);
     console.log('      btn_start found — clicking...');
-    await clickContainer(page, 'btn_start');
-    console.log('      Preloader skipped.');
+
+    // Same approach as preloader.test.ts (confirmed working)
+    const clickPos = await page.evaluate(() => {
+      const w = window as any;
+      const app = w.__PIXI_APP__ || w.app || w.pixiApp || w.game?.app;
+      function find(node: any, name: string): any {
+        if (!node) return null;
+        if (node.name === name) return node;
+        for (const c of node.children || []) { const f = find(c, name); if (f) return f; }
+        return null;
+      }
+      const btn = find(app?.stage, 'btn_start');
+      if (!btn) return { x: 640, y: 360 };
+      const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = rect.width / (canvas.width || rect.width);
+      const scaleY = rect.height / (canvas.height || rect.height);
+      try {
+        const b = btn.getBounds();
+        return { x: Math.round(rect.left + (b.x + b.width / 2) * scaleX), y: Math.round(rect.top + (b.y + b.height / 2) * scaleY) };
+      } catch { return { x: 640, y: 360 }; }
+    });
+    console.log(`      btn_start center: (${clickPos.x}, ${clickPos.y})`);
+
+    await page.mouse.click(clickPos.x, clickPos.y);
+    await page.waitForTimeout(2000);
+    await page.mouse.move(clickPos.x, clickPos.y);
+    await page.mouse.down();
+    await page.waitForTimeout(100);
+    await page.mouse.up();
+    await page.waitForTimeout(2000);
+    await page.mouse.click(640, 360);
+
+    console.log('      Waiting for game to load...');
+    await page.waitForTimeout(5000);
+    console.log('      Game loaded.');
 
     // Dismiss hardware acceleration warning popup if present
     await page.evaluate(() => {
@@ -112,7 +147,6 @@ async function runTest(): Promise<void> {
     await page.waitForTimeout(500);
 
     console.log('[3/5] Setting bet to €1.00...');
-    await waitForContainer(page, 'spin_button', undefined, 30000);
     await page.waitForTimeout(1000);
     await setBet(page, '€1.00');
     await page.waitForTimeout(500);

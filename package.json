@@ -8,7 +8,6 @@
     "inspect": "ts-node src/inspect-buttons.ts",
     "inspect:pixi": "ts-node src/inspect-pixi.ts",
     "test:spin": "ts-node src/tests/spin.test.ts",
-    "serve": "ts-node src/server.ts",
     "test:preloader": "ts-node src/tests/preloader.test.ts",
     "debug:bets": "ts-node src/debug-bets.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
