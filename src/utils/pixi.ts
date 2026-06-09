@@ -22,17 +22,13 @@ export async function launchWithDevTools(
   viewport = { width: 1280, height: 720 },
   recordVideo?: { dir: string },
 ): Promise<{ context: BrowserContext; page: Page; pixi: ReturnType<typeof createPixiHelper> }> {
-  const isCI = !!process.env.CI;
   const context = await chromium.launchPersistentContext('', {
-    headless: isCI,
-    args: isCI ? [
-      '--use-gl=swiftshader',
-      '--enable-webgl',
-      '--ignore-gpu-blocklist',
-      '--disable-gpu-sandbox',
-    ] : [
+    headless: false,
+    args: [
       `--disable-extensions-except=${EXTENSION_PATH}`,
       `--load-extension=${EXTENSION_PATH}`,
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
     ],
     viewport,
     ...(recordVideo ? { recordVideo: { dir: recordVideo.dir, size: viewport } } : {}),
