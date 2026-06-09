@@ -55,15 +55,24 @@
 </div>
 
 <script>
-  const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   const VERCEL_BASE = 'https://auto-test-framework.vercel.app';
   const OWNER = 'AlexPinkQA';
   const REPO  = 'Auto-Test-Framework';
+  const LOCAL_SERVER = 'http://localhost:3000';
 
-  // Show local mode hint
-  if (IS_LOCAL) {
-    document.querySelector('.subtitle').textContent = 'Local mode — browser window will open automatically';
+  let localAvailable = false;
+
+  // Probe local server on page load
+  async function probeLocal() {
+    try {
+      const res = await fetch(`${LOCAL_SERVER}/status`, { signal: AbortSignal.timeout(800) });
+      localAvailable = res.ok;
+    } catch {}
+    if (localAvailable) {
+      document.querySelector('.subtitle').textContent = '🟢 Local mode — browser window will open automatically';
+    }
   }
+  probeLocal();
 
   function showStatus(type, html) {
     const el = document.getElementById('status');
@@ -79,7 +88,10 @@
     btn.disabled = true;
     document.getElementById('video-wrap').style.display = 'none';
 
-    if (IS_LOCAL) {
+    // Re-probe in case server just started
+    await probeLocal();
+
+    if (localAvailable) {
       await runLocal(gameUrl, btn);
     } else {
       await runRemote(gameUrl, btn);
@@ -90,7 +102,7 @@
   async function runLocal(gameUrl, btn) {
     showStatus('running', '<span class="spinner"></span>Starting test… browser will open automatically.');
     try {
-      const res = await fetch('http://localhost:3000/run', {
+      const res = await fetch(`${LOCAL_SERVER}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ game_url: gameUrl }),
@@ -99,7 +111,7 @@
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       pollLocalStatus(btn);
     } catch (e) {
-      showStatus('failure', '❌ ' + e.message + '<br><small>Make sure <b>npm run serve</b> is running.</small>');
+      showStatus('failure', '❌ ' + e.message + '<br><small>Make sure <b>npm run serve</b> is running in your terminal.</small>');
       btn.disabled = false;
     }
   }
@@ -108,7 +120,7 @@
     for (let i = 0; i < 120; i++) {
       await new Promise(r => setTimeout(r, 2000));
       try {
-        const { status } = await fetch('http://localhost:3000/status').then(r => r.json());
+        const { status } = await fetch(`${LOCAL_SERVER}/status`).then(r => r.json());
         if (status === 'passed') {
           showStatus('success', '✅ Test passed!');
           btn.disabled = false;

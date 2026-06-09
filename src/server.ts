@@ -11,7 +11,9 @@ const HTML_PATH = path.resolve(__dirname, '../docs/index.html');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 const server = http.createServer((req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin || '';
+  const allowed = ['http://localhost:3000', 'https://alexpinkqa.github.io'];
+  res.setHeader('Access-Control-Allow-Origin', allowed.includes(origin) ? origin : allowed[0]);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
