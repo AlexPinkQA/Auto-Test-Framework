@@ -4,10 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Auto Test Framework</title>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-    .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 32px; width: 100%; max-width: 560px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 32px; width: 100%; max-width: 620px; }
     h1 { font-size: 22px; margin-bottom: 4px; }
     .subtitle { color: #8b949e; font-size: 14px; margin-bottom: 28px; }
     label { display: block; font-size: 13px; color: #8b949e; margin-bottom: 6px; }
@@ -24,6 +25,11 @@
     .status a { color: inherit; font-weight: 600; }
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #388bfd; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    #video-wrap { display: none; margin-top: 20px; }
+    #video-wrap video { width: 100%; border-radius: 8px; border: 1px solid #30363d; }
+    #video-wrap .video-label { font-size: 13px; color: #8b949e; margin-bottom: 8px; }
+    .download-btn { display: inline-block; margin-top: 10px; padding: 7px 16px; background: #21262d; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 13px; text-decoration: none; }
+    .download-btn:hover { background: #30363d; }
   </style>
 </head>
 <body>
@@ -39,10 +45,17 @@
   <button class="btn" id="run-btn" onclick="runTest()">▶ Run Test</button>
 
   <div class="status" id="status"></div>
+
+  <div id="video-wrap">
+    <p class="video-label">Test recording:</p>
+    <video id="video-player" controls></video>
+    <br/>
+    <a id="download-link" class="download-btn" href="#" download>⬇ Download video</a>
+  </div>
 </div>
 
 <script>
-  const VERCEL_URL = 'https://auto-test-framework.vercel.app/api/trigger';
+  const VERCEL_BASE = 'https://auto-test-framework.vercel.app';
   const OWNER = 'AlexPinkQA';
   const REPO  = 'Auto-Test-Framework';
 
@@ -58,29 +71,33 @@
 
     const btn = document.getElementById('run-btn');
     btn.disabled = true;
+    document.getElementById('video-wrap').style.display = 'none';
     showStatus('running', '<span class="spinner"></span>Starting test...');
 
+    // Open GitHub Actions page in new tab immediately (before async, to avoid popup block)
+    const actionsTab = window.open(`https://github.com/${OWNER}/${REPO}/actions`, '_blank');
+
     try {
-      const res = await fetch(VERCEL_URL, {
+      const res = await fetch(`${VERCEL_BASE}/api/trigger`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ game_url: gameUrl }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
-      showStatus('running', '<span class="spinner"></span>Test is running... waiting for result');
+      showStatus('running', '<span class="spinner"></span>Test is running...');
       await new Promise(r => setTimeout(r, 6000));
-      pollRun();
+      pollRun(actionsTab);
     } catch (e) {
       showStatus('failure', '❌ ' + e.message);
       btn.disabled = false;
     }
   }
 
-  async function pollRun() {
+  async function pollRun(actionsTab) {
     const runsUrl = `https://api.github.com/repos/${OWNER}/${REPO}/actions/runs?event=workflow_dispatch&per_page=1`;
+    let runOpened = false;
 
     for (let i = 0; i < 60; i++) {
       await new Promise(r => setTimeout(r, 5000));
@@ -88,22 +105,66 @@
         const run = await fetch(runsUrl).then(r => r.json()).then(d => d.workflow_runs?.[0]);
         if (!run) continue;
 
-        const link = `https://github.com/${OWNER}/${REPO}/actions/runs/${run.id}`;
+        const runUrl = `https://github.com/${OWNER}/${REPO}/actions/runs/${run.id}`;
+
+        // Navigate the already-open tab to this specific run
+        if (!runOpened && actionsTab && !actionsTab.closed) {
+          actionsTab.location.href = runUrl;
+          runOpened = true;
+        }
 
         if (run.status === 'completed') {
           const ok = run.conclusion === 'success';
+          const icon = ok ? '✅' : '❌';
           showStatus(ok ? 'success' : 'failure',
-            `${ok ? '✅' : '❌'} Test ${run.conclusion}! <a href="${link}" target="_blank">View run & download video →</a>`);
+            `${icon} Test ${run.conclusion}! <a href="${runUrl}" target="_blank">View run →</a>`);
+
+          if (ok) loadVideo(run.id, runUrl);
           document.getElementById('run-btn').disabled = false;
           return;
         }
 
-        showStatus('running', `<span class="spinner"></span>Status: <b>${run.status}</b> — <a href="${link}" target="_blank">View run →</a>`);
+        showStatus('running',
+          `<span class="spinner"></span>Status: <b>${run.status}</b> — <a href="${runUrl}" target="_blank">View run →</a>`);
       } catch {}
     }
 
     showStatus('failure', '⏱ Timeout. <a href="https://github.com/' + OWNER + '/' + REPO + '/actions" target="_blank">Check manually →</a>');
     document.getElementById('run-btn').disabled = false;
+  }
+
+  async function loadVideo(runId, runUrl) {
+    try {
+      // Get artifact ZIP URL from Vercel proxy
+      const res = await fetch(`${VERCEL_BASE}/api/video?run_id=${runId}`);
+      const { url } = await res.json();
+      if (!url) throw new Error('No URL');
+
+      // Fetch ZIP (artifacts may need a moment to be ready)
+      await new Promise(r => setTimeout(r, 3000));
+      const zipRes = await fetch(url);
+      if (!zipRes.ok) throw new Error('ZIP fetch failed');
+      const zipData = await zipRes.arrayBuffer();
+
+      // Unzip and find .webm
+      const zip = await JSZip.loadAsync(zipData);
+      const webmEntry = Object.values(zip.files).find(f => f.name.endsWith('.webm'));
+      if (!webmEntry) throw new Error('No video in artifact');
+
+      const blob = new Blob([await webmEntry.async('arraybuffer')], { type: 'video/webm' });
+      const blobUrl = URL.createObjectURL(blob);
+
+      const video = document.getElementById('video-player');
+      const dlLink = document.getElementById('download-link');
+      video.src = blobUrl;
+      dlLink.href = blobUrl;
+      dlLink.download = `test-run-${runId}.webm`;
+      document.getElementById('video-wrap').style.display = 'block';
+    } catch (e) {
+      // Fallback: show download link on GitHub
+      showStatus('success',
+        `✅ Test passed! <a href="${runUrl}" target="_blank">Download video on GitHub →</a>`);
+    }
   }
 </script>
 </body>
