@@ -55,9 +55,15 @@
 </div>
 
 <script>
+  const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   const VERCEL_BASE = 'https://auto-test-framework.vercel.app';
   const OWNER = 'AlexPinkQA';
   const REPO  = 'Auto-Test-Framework';
+
+  // Show local mode hint
+  if (IS_LOCAL) {
+    document.querySelector('.subtitle').textContent = 'Local mode — browser window will open automatically';
+  }
 
   function showStatus(type, html) {
     const el = document.getElementById('status');
@@ -72,6 +78,55 @@
     const btn = document.getElementById('run-btn');
     btn.disabled = true;
     document.getElementById('video-wrap').style.display = 'none';
+
+    if (IS_LOCAL) {
+      await runLocal(gameUrl, btn);
+    } else {
+      await runRemote(gameUrl, btn);
+    }
+  }
+
+  // ── LOCAL MODE ────────────────────────────────────────────────────────────────
+  async function runLocal(gameUrl, btn) {
+    showStatus('running', '<span class="spinner"></span>Starting test… browser will open automatically.');
+    try {
+      const res = await fetch('http://localhost:3000/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ game_url: gameUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      pollLocalStatus(btn);
+    } catch (e) {
+      showStatus('failure', '❌ ' + e.message + '<br><small>Make sure <b>npm run serve</b> is running.</small>');
+      btn.disabled = false;
+    }
+  }
+
+  async function pollLocalStatus(btn) {
+    for (let i = 0; i < 120; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const { status } = await fetch('http://localhost:3000/status').then(r => r.json());
+        if (status === 'passed') {
+          showStatus('success', '✅ Test passed!');
+          btn.disabled = false;
+          return;
+        }
+        if (status === 'failed') {
+          showStatus('failure', '❌ Test failed. Check the terminal for details.');
+          btn.disabled = false;
+          return;
+        }
+      } catch {}
+    }
+    showStatus('failure', '⏱ Timeout waiting for test result.');
+    btn.disabled = false;
+  }
+
+  // ── REMOTE MODE (GitHub Actions) ─────────────────────────────────────────────
+  async function runRemote(gameUrl, btn) {
     showStatus('running', '<span class="spinner"></span>Starting test...');
 
     // Open GitHub Actions page in new tab immediately (before async, to avoid popup block)
@@ -88,14 +143,14 @@
 
       showStatus('running', '<span class="spinner"></span>Test is running...');
       await new Promise(r => setTimeout(r, 6000));
-      pollRun(actionsTab);
+      pollRun(actionsTab, btn);
     } catch (e) {
       showStatus('failure', '❌ ' + e.message);
       btn.disabled = false;
     }
   }
 
-  async function pollRun(actionsTab) {
+  async function pollRun(actionsTab, btn) {
     const runsUrl = `https://api.github.com/repos/${OWNER}/${REPO}/actions/runs?event=workflow_dispatch&per_page=1`;
     let runOpened = false;
 
@@ -107,7 +162,6 @@
 
         const runUrl = `https://github.com/${OWNER}/${REPO}/actions/runs/${run.id}`;
 
-        // Navigate the already-open tab to this specific run
         if (!runOpened && actionsTab && !actionsTab.closed) {
           actionsTab.location.href = runUrl;
           runOpened = true;
@@ -118,9 +172,8 @@
           const icon = ok ? '✅' : '❌';
           showStatus(ok ? 'success' : 'failure',
             `${icon} Test ${run.conclusion}! <a href="${runUrl}" target="_blank">View run →</a>`);
-
           if (ok) loadVideo(run.id, runUrl);
-          document.getElementById('run-btn').disabled = false;
+          btn.disabled = false;
           return;
         }
 
@@ -130,23 +183,20 @@
     }
 
     showStatus('failure', '⏱ Timeout. <a href="https://github.com/' + OWNER + '/' + REPO + '/actions" target="_blank">Check manually →</a>');
-    document.getElementById('run-btn').disabled = false;
+    btn.disabled = false;
   }
 
   async function loadVideo(runId, runUrl) {
     try {
-      // Get artifact ZIP URL from Vercel proxy
       const res = await fetch(`${VERCEL_BASE}/api/video?run_id=${runId}`);
       const { url } = await res.json();
       if (!url) throw new Error('No URL');
 
-      // Fetch ZIP (artifacts may need a moment to be ready)
       await new Promise(r => setTimeout(r, 3000));
       const zipRes = await fetch(url);
       if (!zipRes.ok) throw new Error('ZIP fetch failed');
       const zipData = await zipRes.arrayBuffer();
 
-      // Unzip and find .webm
       const zip = await JSZip.loadAsync(zipData);
       const webmEntry = Object.values(zip.files).find(f => f.name.endsWith('.webm'));
       if (!webmEntry) throw new Error('No video in artifact');
@@ -161,7 +211,6 @@
       dlLink.download = `test-run-${runId}.webm`;
       document.getElementById('video-wrap').style.display = 'block';
     } catch (e) {
-      // Fallback: show download link on GitHub
       showStatus('success',
         `✅ Test passed! <a href="${runUrl}" target="_blank">Download video on GitHub →</a>`);
     }
